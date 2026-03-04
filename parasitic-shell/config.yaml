@@ -1,0 +1,51 @@
+# Parasitic Shell Configuration
+# 寄生式旁路外壳 — 方案 D
+
+proxy:
+  listen_host: "127.0.0.1"
+  listen_port: 18900
+  # OpenClaw 的 API 请求会被重定向到这里
+
+upstream:
+  # 真实的 LLM API 端点（从 OpenClaw 配置中读取）
+  # 支持多 provider，按 path prefix 路由
+  anthropic:
+    base_url: "https://api.anthropic.com"
+    api_key_env: "ANTHROPIC_API_KEY"
+  openai:
+    base_url: "https://api.openai.com"
+    api_key_env: "OPENAI_API_KEY"
+
+coa:
+  # .coa 底盘配置
+  chassis_path: "./chassis.coa"       # 底盘文件路径
+  max_budget_tokens: 40000            # 底盘最大 token 预算
+  injection_position: "system_prefix" # system_prefix | first_user | after_system
+
+defenses:
+  ttl:
+    default_hours: 720        # 默认 TTL: 30 天
+    core_hours: 8760          # 核心记忆 TTL: 1 年
+    active_hours: 24          # 活跃缓冲 TTL: 24 小时
+    check_interval_minutes: 60
+  conflict:
+    priority_order:
+      - "core"      # 最高优先级
+      - "active"
+      - "cached"
+      - "stale"     # 最低优先级
+    max_conflicts_before_escalate: 3
+  pollution:
+    trusted_sources:
+      - "cognitive-arch"
+      - "coa-product"
+      - "user-direct"
+    untrusted_threshold: 0.3  # 低于此信任度的内容被过滤
+    quarantine_hours: 48      # 隔离期
+
+memory_keeper:
+  storage_dir: "./memory_store"
+  compression_model: "gemini"   # 用于蒸馏的模型
+  max_distilled_tokens: 120000  # 蒸馏记忆上限
+  emotion_weight_enabled: true
+  raw_hash_retention: 50        # 保留最多 50 个原话锚点

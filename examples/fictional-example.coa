@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+  虚构示例 - 认知底盘格式演示
+  这是一个完全虚构的示例，用于展示 .coa 格式的结构
+  所有人物、场景、对话均为虚构
+-->
+<COA version="1.0" budget_tokens="40000">
+  <Metadata>
+    <created>2026-03-05T00:00:00Z</created>
+    <owner>fictional-user</owner>
+    <description>虚构用户的认知底盘示例</description>
+  </Metadata>
+
+  <Distilled_Memory>
+    <!-- 身份理解段 -->
+    <Segment id="identity" category="identity" priority="core" ttl="8760.0h">
+      <Compressed>
+        用户 ∈ {独立开发者, 技术爱好者}
+        [Complexity] ⇒ [Simplicity_Preference]
+        ∀ decision : prefer(实用) > prefer(完美)
+      </Compressed>
+      <Anchors>
+        <Raw_Hash id="rh001" emotion="4" source="user-direct" trust="direct">
+          "我更喜欢能用的东西，而不是完美的设计"
+        </Raw_Hash>
+        <Raw_Hash id="rh002" emotion="3" source="user-direct" trust="direct">
+          "技术是工具，不是目的"
+        </Raw_Hash>
+      </Anchors>
+    </Segment>
+
+    <!-- 价值观段 -->
+    <Segment id="values" category="values" priority="core" ttl="8760.0h">
+      <Compressed>
+        [Transparency] ≡ [Trust]
+        [Efficiency] > [Elegance]
+        ¬[Over_Engineering]
+      </Compressed>
+      <Anchors>
+        <Raw_Hash id="rh003" emotion="5" source="user-direct" trust="direct">
+          "我讨厌过度设计，简单直接就好"
+        </Raw_Hash>
+      </Anchors>
+    </Segment>
+
+    <!-- 工作方式段 -->
+    <Segment id="work_style" category="behavioral" priority="active" ttl="720.0h">
+      <Compressed>
+        工作模式 ∈ {深度专注, 快速迭代}
+        [Prototype] → [Test] → [Iterate]
+        ¬[Perfect_First_Time]
+      </Compressed>
+      <Anchors>
+        <Raw_Hash id="rh004" emotion="3" source="observed" trust="observed">
+          "先做出来，再优化"
+        </Raw_Hash>
+      </Anchors>
+    </Segment>
+
+    <!-- 技术偏好段 -->
+    <Segment id="tech_preferences" category="preferences" priority="active" ttl="720.0h">
+      <Compressed>
+        语言偏好: Python > JavaScript > Others
+        架构偏好: [Modular] ∩ [Testable]
+        工具偏好: [Open_Source] > [Proprietary]
+      </Compressed>
+      <Anchors>
+        <Raw_Hash id="rh005" emotion="2" source="observed" trust="observed">
+          "Python 的生态系统很适合快速原型开发"
+        </Raw_Hash>
+      </Anchors>
+    </Segment>
+
+    <!-- 情感锚点段 -->
+    <Segment id="emotional_anchor_01" category="emotional_anchor" priority="core" ttl="43800.0h">
+      <Compressed>
+        [Frustration] ← [Repeated_Failures]
+        [Breakthrough] ⇒ [High_Satisfaction]
+      </Compressed>
+      <Anchors>
+        <Raw_Hash id="ea001" emotion="5" source="user-direct" trust="direct">
+          "当我终于解决那个困扰我一周的 bug 时，那种感觉太棒了"
+        </Raw_Hash>
+      </Anchors>
+    </Segment>
+
+    <!-- 决策模式段 -->
+    <Segment id="decision_patterns" category="behavioral" priority="active" ttl="720.0h">
+      <Compressed>
+        决策风格: [Data_Driven] ∩ [Intuition]
+        ∀ choice : evaluate(pros) ∪ evaluate(cons) ⇒ decision
+        [Risk_Tolerance] = Medium
+      </Compressed>
+      <Anchors>
+        <Raw_Hash id="rh006" emotion="3" source="observed" trust="observed">
+          "我会权衡利弊，但最终还是要相信直觉"
+        </Raw_Hash>
+      </Anchors>
+    </Segment>
+
+    <!-- 沟通风格段 -->
+    <Segment id="communication_style" category="behavioral" priority="active" ttl="720.0h">
+      <Compressed>
+        风格: [Direct] ∩ [Concise]
+        ¬[Verbose] ∧ ¬[Formal]
+        prefer(口语化) > prefer(学术化)
+      </Compressed>
+      <Anchors>
+        <Raw_Hash id="rh007" emotion="2" source="observed" trust="observed">
+          "说重点就行，不用那么多客套话"
+        </Raw_Hash>
+      </Anchors>
+    </Segment>
+  </Distilled_Memory>
+
+  <!-- 防御机制配置 -->
+  <Defense>
+    <TTL default="720.0h" core="8760.0h" active="24.0h" cached="168.0h"/>
+    <Conflict order="core > active > cached > stale"/>
+    <Pollution trusted="user-direct,observed" threshold="0.3"/>
+  </Defense>
+
+  <!-- 元数据统计 -->
+  <Statistics>
+    <total_segments>8</total_segments>
+    <total_anchors>8</total_anchors>
+    <estimated_tokens>3500</estimated_tokens>
+    <compression_ratio>0.72</compression_ratio>
+  </Statistics>
+</COA>
