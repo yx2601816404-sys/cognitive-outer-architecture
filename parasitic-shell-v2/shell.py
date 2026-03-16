@@ -42,7 +42,7 @@ log = logging.getLogger("shell")
 
 DEFAULT_CHASSIS = "/home/lyall/.openclaw/workspace/cognitive-arch/core-identity-v2.coa"
 DEFAULT_PORT = 18901  # v2 用新端口
-DEFAULT_UPSTREAM = "http://127.0.0.1:7861"  # gcli 通道（Gemini）
+DEFAULT_UPSTREAM = "https://api.anthropic.com"  # 默认上游
 
 
 # ============================================================
@@ -330,11 +330,22 @@ class ParasiticShellV2:
                 f"{self.upstream}/v1/messages",
                 json=payload,
                 headers=headers,
+                timeout=aiohttp.ClientTimeout(total=120),  # 120 秒超时
             ) as resp:
                 async for chunk in resp.content.iter_any():
-                    await response.write(chunk)
+                    try:
+                        await response.write(chunk)
+                    except (ConnectionResetError, asyncio.CancelledError) as e:
+                        log.warning(f"客户端断开连接: {e}")
+                        break
+        except asyncio.TimeoutError:
+            log.error("上游请求超时")
+            try:
+                await response.write(b"\n\n[ERROR] Upstream timeout")
+            except:
+                pass
         except Exception as e:
-            log.error(f"流式传输错误: {e}")
+            log.error(f"流式传输错误: {e}", exc_info=True)
         
         return response
     
@@ -386,13 +397,18 @@ class ParasiticShellV2:
         return headers
     
     def _get_api_key(self) -> str:
-        """获取上游 API key（gcli 通道）"""
+        """获取上游 API key（优先环境变量，其次 OpenClaw 配置）"""
+        # 优先使用环境变量
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if key:
+            return key
+        # 回退到 OpenClaw 配置
         try:
             with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
                 config = json.load(f)
-            # 使用 gcli 通道
-            if "gcli" in config["models"]["providers"]:
-                return config["models"]["providers"]["gcli"]["apiKey"]
+            for provider in config.get("models", {}).get("providers", {}).values():
+                if "apiKey" in provider:
+                    return provider["apiKey"]
             return ""
         except Exception:
             return ""

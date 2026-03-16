@@ -26,7 +26,7 @@ class Thinker:
         self,
         upstream_url: str,
         api_key: str,
-        model: str = "gemini-3.1-pro-preview",  # gcli Gemini
+        model: str = "gemini-3.1-pro-preview",  # Gemini 3.1 Pro
     ):
         self.upstream_url = upstream_url.rstrip("/")
         self.api_key = api_key
@@ -132,7 +132,7 @@ class Thinker:
             "",
             "=== 防幻觉毒誓（必须严格遵守）===",
             "",
-            "当你面对关于用户的以下话题时，你的置信度必须强制降为 0：",
+            "当你面对关于用户（Lyall）的以下话题时，你的置信度必须强制降为 0：",
             "- 他的过去选择、情感、具体项目细节",
             "- 他的家庭关系、童年经历、宠物",
             "- 他对某个技术、方案、风格的偏好",

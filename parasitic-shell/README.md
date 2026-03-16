@@ -49,8 +49,8 @@ OpenClaw ──→ parasitic-shell (port 18900) ──→ LLM API (Anthropic/Ope
 | 机制 | 作用 | 灵感来源 |
 |------|------|---------|
 | TTL 衰减时钟 | 记忆段有生命周期，情感加权延长 TTL | MemoryBank 艾宾浩斯遗忘曲线 |
-| 冲突优先级 | core > active > cached > stale | "没有东西在消化"洞察 |
-| 外源污染过滤 | 追踪来源，隔离不可信内容 | "标签偏见"和"观察者效应" |
+| 冲突优先级 | core > active > cached > stale | 了的"没有东西在消化"洞察 |
+| 外源污染过滤 | 追踪来源，隔离不可信内容 | 了的"大专偏见"和"观察者 DK 效应" |
 
 ## 使用
 

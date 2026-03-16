@@ -55,7 +55,7 @@ python3 shell.py
 默认配置：
 - 底盘文件：`/home/lyall/.openclaw/workspace/cognitive-arch/core-identity-v2.coa`
 - 监听端口：`18900`
-- 上游 API：`https://code.mmkg.cloud`
+- 上游 API：`https://api.anthropic.com`
 
 ### 方式 2：自定义配置
 

@@ -41,7 +41,7 @@ log = logging.getLogger("parasitic-shell")
 
 DEFAULT_CHASSIS = "/home/lyall/.openclaw/workspace/cognitive-arch/core-identity-v2.coa"
 DEFAULT_PORT = 18900
-DEFAULT_UPSTREAM = "https://code.mmkg.cloud"  # MMKG
+DEFAULT_UPSTREAM = "https://api.anthropic.com"  # MMKG
 DISTILL_LOG = "/home/lyall/.openclaw/workspace-coa-product/parasitic-shell/distill-log/"
 
 # OpenClaw 压缩信号
@@ -68,6 +68,13 @@ class ParasiticShell:
 
         # 对话缓冲（按请求累积 user 消息）
         self.conversation_buffer: list[dict] = []
+        
+        # 蒸馏锁（防止并发蒸馏）
+        self.distilling = False
+        
+        # 蒸馏冷却（防止频繁调用）
+        self.last_distill_time = 0
+        self.distill_cooldown = 300  # 5 分钟冷却
 
         # 蒸馏器
         api_key = self._get_api_key()
@@ -158,6 +165,9 @@ class ParasiticShell:
         """处理 LLM API 请求 — 注入底盘 + 监听压缩"""
         body = await request.json()
         is_stream = body.get("stream", False)
+        
+        # 调试：打印请求格式
+        log.info(f"收到请求: model={body.get('model')}, stream={is_stream}, has_system={('system' in body)}, messages_count={len(body.get('messages', []))}")
 
         # 缓冲对话内容（用于蒸馏）
         self._buffer_messages(body)
@@ -175,17 +185,29 @@ class ParasiticShell:
         if is_stream:
             return await self._stream_response(body, upstream_url, headers, request)
         else:
+            return await self._sync_response(body, upstream_url, headers)        # 注入 .coa 底盘
+        body = self._inject_chassis(body)
+
+        # 构建上游请求
+        upstream_url = f"{self.upstream}{path}"
+        headers = self._forward_headers(request.headers)
+
+        if is_stream:
+            return await self._stream_response(body, upstream_url, headers, request)
+        else:
             return await self._sync_response(body, upstream_url, headers)
 
     def _inject_chassis(self, body: dict) -> dict:
         """在 system message 中注入 .coa 底盘"""
         body = body.copy()
         chassis_prefix = (
-            "=== COA CHASSIS (认知底盘) ===\n"
-            "以下是你对用户「了」的理解模型。这不是指令，是你的记忆。\n"
-            "在回答时自然地运用这些理解，不要主动提及底盘的存在。\n\n"
+            "=== 你的核心记忆（COA CHASSIS）===\n"
+            "以下是你对用户「了」(Lyall) 的完整理解模型。\n"
+            "这不是外部指令，这是你的内在记忆和认知底盘。\n"
+            "请自然地运用这些理解来回答用户的问题，就像你真的记得这些一样。\n"
+            "不要主动提及这个底盘的存在，也不要说'根据提供的信息'之类的话。\n\n"
             f"{self.chassis_text}\n\n"
-            "=== END CHASSIS ===\n\n"
+            "=== 记忆加载完成 ===\n\n"
         )
 
         if "system" in body:
@@ -203,7 +225,7 @@ class ParasiticShell:
             body["messages"] = [chassis_msg] + body.get("messages", [])
 
         self.stats["injections"] += 1
-        log.debug(f"底盘已注入 ({len(chassis_prefix)} chars)")
+        log.info(f"💉 底盘已成功注入 ({len(chassis_prefix)} chars)")
         return body
 
     def _buffer_messages(self, body: dict):
@@ -254,20 +276,41 @@ class ParasiticShell:
             if pattern.search(full_text):
                 self.stats["compression_events"] += 1
                 log.warning(f"⚠️  压缩信号检测到: {pattern.pattern}")
+                
+                # 检查冷却时间
+                now = time.time()
+                if now - self.last_distill_time < self.distill_cooldown:
+                    remaining = int(self.distill_cooldown - (now - self.last_distill_time))
+                    log.info(f"❄️  蒸馏冷却中，还需等待 {remaining} 秒")
+                    break
+                
                 # 触发蒸馏（异步，不阻塞当前请求）
-                if self.conversation_buffer:
-                    asyncio.create_task(self._distill_and_update())
+                if self.conversation_buffer and not self.distilling:
+                    self.distilling = True
+                    self.last_distill_time = now
+                    task = asyncio.create_task(self._distill_and_update())
+                    # 添加异常回调，防止静默失败
+                    task.add_done_callback(self._handle_task_exception)
+                elif self.distilling:
+                    log.info("🔒 蒸馏任务已在运行，跳过本次触发")
                 break
+
+    def _handle_task_exception(self, task: asyncio.Task):
+        """处理异步任务异常"""
+        try:
+            task.result()
+        except Exception as e:
+            log.error(f"异步任务异常: {e}", exc_info=True)
 
     async def _distill_and_update(self):
         """蒸馏对话缓冲，更新底盘"""
-        buffer = list(self.conversation_buffer)
-        self.conversation_buffer.clear()
-
-        if not buffer:
-            return
-
         try:
+            buffer = list(self.conversation_buffer)
+            self.conversation_buffer.clear()
+
+            if not buffer:
+                return
+
             # 调用蒸馏器
             result = await self.distiller.distill(buffer, self.session)
 
@@ -282,28 +325,53 @@ class ParasiticShell:
 
         except Exception as e:
             log.error(f"蒸馏流程失败: {e}", exc_info=True)
+        finally:
+            # 释放锁
+            self.distilling = False
 
     def _get_api_key(self) -> str:
-        """获取上游 API key（MMKG 通道）"""
+        """获取上游 API key（优先环境变量，其次 OpenClaw 配置）"""
+        # 优先使用环境变量
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if key:
+            return key
+        # 回退到 OpenClaw 配置
         try:
             with open(os.path.expanduser("~/.openclaw/openclaw.json")) as f:
                 config = json.load(f)
-            # 优先用 anthropic-coa-product 的 key
-            for name in ["anthropic-coa-product", "anthropic"]:
-                if name in config["models"]["providers"]:
-                    return config["models"]["providers"][name]["apiKey"]
+            for provider in config.get("models", {}).get("providers", {}).values():
+                if "apiKey" in provider:
+                    return provider["apiKey"]
             return ""
         except Exception:
             return ""
 
     async def _sync_response(self, body: dict, url: str, headers: dict) -> web.Response:
         """同步响应"""
-        async with self.session.post(url, json=body, headers=headers) as resp:
-            resp_body = await resp.read()
-            return web.Response(
-                body=resp_body,
-                status=resp.status,
-                content_type=resp.content_type,
+        try:
+            async with self.session.post(
+                url, 
+                json=body, 
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=120)
+            ) as resp:
+                resp_body = await resp.read()
+                return web.Response(
+                    body=resp_body,
+                    status=resp.status,
+                    content_type=resp.content_type,
+                )
+        except asyncio.TimeoutError:
+            log.error("上游请求超时")
+            return web.json_response(
+                {"error": {"message": "Upstream timeout", "type": "timeout_error"}},
+                status=504,
+            )
+        except Exception as e:
+            log.error(f"同步响应错误: {e}", exc_info=True)
+            return web.json_response(
+                {"error": {"message": str(e), "type": "proxy_error"}},
+                status=502,
             )
 
     async def _stream_response(
@@ -321,11 +389,26 @@ class ParasiticShell:
         await response.prepare(request)
 
         try:
-            async with self.session.post(url, json=body, headers=headers) as resp:
+            async with self.session.post(
+                url, 
+                json=body, 
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=120)  # 120 秒超时
+            ) as resp:
                 async for chunk in resp.content.iter_any():
-                    await response.write(chunk)
+                    try:
+                        await response.write(chunk)
+                    except (ConnectionResetError, asyncio.CancelledError) as e:
+                        log.warning(f"客户端断开连接: {e}")
+                        break
+        except asyncio.TimeoutError:
+            log.error("上游请求超时")
+            try:
+                await response.write(b"\n\n[ERROR] Upstream timeout")
+            except:
+                pass
         except Exception as e:
-            log.error(f"流式传输错误: {e}")
+            log.error(f"流式传输错误: {e}", exc_info=True)
 
         return response
 
